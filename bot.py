@@ -9,7 +9,7 @@ from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
+from aiogram.types import InlineKeyboardButton, CallbackQuery, FSInputFile
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 # ============================================================
@@ -81,6 +81,20 @@ bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher(storage=storage)
 
 # ============================================================
+#  ФУНКЦИЯ ДЛЯ ФОТО
+# ============================================================
+
+def get_photo():
+    """Ищет фото в папке с ботом"""
+    current_dir = Path(__file__).parent
+    for file in current_dir.iterdir():
+        if file.is_file() and "photo" in file.name.lower():
+            print(f"✅ Найдено фото: {file.name}")
+            return FSInputFile(str(file))
+    print("❌ Файл с 'photo' не найден!")
+    return None
+
+# ============================================================
 #  КЛАВИАТУРЫ
 # ============================================================
 
@@ -150,7 +164,9 @@ def get_referral_keyboard():
         InlineKeyboardButton(text="🔗 Моя реферальная ссылка", callback_data="referral_link"),
         InlineKeyboardButton(text="📊 Мои приглашения", callback_data="referral_stats")
     )
-    builder.row(InlineKeyboardButton(text="🎁 Получить бесплатный промокод", callback_data="referral_get_promo"))
+    builder.row(
+        InlineKeyboardButton(text="🎁 Получить бесплатный промокод", callback_data="referral_get_promo")
+    )
     builder.row(InlineKeyboardButton(text="🔙 Назад", callback_data="back_to_main"))
     return builder.as_markup()
 
@@ -161,34 +177,43 @@ def get_referral_keyboard():
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
     data = load_data()
+    user_id = str(message.from_user.id)
     
-    if message.from_user.id not in data["users"]:
-        data["users"].append(message.from_user.id)
-        save_data(data)
+    # ============================================================
+    #  РЕФЕРАЛЬНАЯ СИСТЕМА - РЕГИСТРАЦИЯ ПРИГЛАШЁННОГО
+    # ============================================================
     
     args = message.text.split()
     if len(args) > 1:
         try:
-            referrer_id = int(args[1])
-            if referrer_id != message.from_user.id:
-                if str(message.from_user.id) not in data["referrals"]:
-                    data["referrals"][str(message.from_user.id)] = {
-                        "invited": [],
-                        "invited_by": referrer_id,
-                        "promo_given": False
-                    }
-                    if str(referrer_id) in data["referrals"]:
-                        data["referrals"][str(referrer_id)]["invited"].append(message.from_user.id)
-                    else:
-                        data["referrals"][str(referrer_id)] = {
-                            "invited": [message.from_user.id],
-                            "invited_by": None,
-                            "promo_given": False
-                        }
-                    save_data(data)
-                    await message.answer("🎉 *Ты перешёл по реферальной ссылке!*", parse_mode="Markdown")
+            referrer_id = args[1]
+            
+            if referrer_id != user_id:
+                if referrer_id in data["referrals"]:
+                    if user_id not in data["referrals"][referrer_id]["invited"]:
+                        data["referrals"][referrer_id]["invited"].append(int(user_id))
+                        save_data(data)
+                        
+                        if user_id not in data["referrals"]:
+                            data["referrals"][user_id] = {
+                                "invited": [],
+                                "invited_by": int(referrer_id),
+                                "promo_given": False
+                            }
+                            save_data(data)
+                        
+                        await message.answer(
+                            "🎉 *Ты перешёл по реферальной ссылке!*\n\n"
+                            "Приглашай друзей и получай БЕСПЛАТНЫЕ промокоды!",
+                            parse_mode="Markdown"
+                        )
         except ValueError:
             pass
+    
+    # Сохраняем пользователя для рассылки
+    if message.from_user.id not in data["users"]:
+        data["users"].append(message.from_user.id)
+        save_data(data)
     
     welcome_text = (
         "🔪 *Добро пожаловать в магазин промокодов Standoff 2!*\n\n"
@@ -199,6 +224,19 @@ async def cmd_start(message: types.Message):
         "👥 *Реферальная система:* приглашай друзей и получай "
         "промокоды БЕСПЛАТНО!"
     )
+    
+    photo = get_photo()
+    if photo:
+        try:
+            await message.answer_photo(
+                photo=photo,
+                caption=welcome_text,
+                reply_markup=get_main_keyboard(),
+                parse_mode="Markdown"
+            )
+            return
+        except Exception as e:
+            print(f"Ошибка фото: {e}")
     
     await message.answer(welcome_text, reply_markup=get_main_keyboard(), parse_mode="Markdown")
 
@@ -250,7 +288,24 @@ async def callback_get_promo(callback: CallbackQuery, state: FSMContext):
 async def callback_back_to_main(callback: CallbackQuery, state: FSMContext):
     await state.clear()
     text = "🔪 *Главное меню*\n\nВыбери действие:"
-    await callback.message.edit_text(text, reply_markup=get_main_keyboard(), parse_mode="Markdown")
+    
+    await callback.message.delete()
+    
+    photo = get_photo()
+    if photo:
+        try:
+            await callback.message.answer_photo(
+                photo=photo,
+                caption=text,
+                reply_markup=get_main_keyboard(),
+                parse_mode="Markdown"
+            )
+            await callback.answer()
+            return
+        except Exception as e:
+            print(f"Ошибка фото в меню: {e}")
+    
+    await callback.message.answer(text, reply_markup=get_main_keyboard(), parse_mode="Markdown")
     await callback.answer()
 
 @dp.callback_query(F.data == "help")
@@ -379,11 +434,19 @@ async def callback_paid(callback: CallbackQuery, state: FSMContext):
 async def referral_menu(callback: CallbackQuery, state: FSMContext):
     await state.clear()
     data = load_data()
+    user_id = str(callback.from_user.id)
+    
+    ref_data = data["referrals"].get(user_id, {"invited": [], "invited_by": None, "promo_given": False})
+    invited_count = len(ref_data.get("invited", []))
+    needed = data.get("referral_reward", 10)
+    
     text = (
         "👥 *Реферальная система*\n\n"
-        "Приглашай друзей по своей реферальной ссылке!\n"
-        f"🎁 За каждые *{data.get('referral_reward', 10)}* приглашений "
-        "ты получаешь БЕСПЛАТНЫЙ промокод!"
+        f"👤 Твой ID: `{user_id}`\n"
+        f"👥 Приглашено: *{invited_count}* человек\n"
+        f"🎯 Нужно для промокода: *{needed}*\n"
+        f"📌 Осталось: *{max(0, needed - invited_count)}*\n\n"
+        "🔗 Отправь ссылку друзьям и получай награды!"
     )
     await callback.message.edit_text(text, reply_markup=get_referral_keyboard(), parse_mode="Markdown")
     await callback.answer()
@@ -398,27 +461,44 @@ async def referral_link(callback: CallbackQuery, state: FSMContext):
     data = load_data()
     ref_data = data["referrals"].get(str(user_id), {"invited": []})
     invited_count = len(ref_data.get("invited", []))
+    needed = data.get("referral_reward", 10)
     
     text = (
         "🔗 *Твоя реферальная ссылка:*\n\n"
         f"`{link}`\n\n"
         f"👥 Приглашено: *{invited_count}* человек\n"
-        f"🎯 Нужно: *{data.get('referral_reward', 10)}*"
+        f"🎯 Нужно: *{needed}*\n"
+        f"📌 Осталось: *{max(0, needed - invited_count)}*"
     )
     
     builder = InlineKeyboardBuilder()
-    builder.row(InlineKeyboardButton(text="🔙 Назад", callback_data="referral_menu"))
+    builder.row(
+        InlineKeyboardButton(text="📋 Скопировать ссылку", callback_data="copy_link"),
+        InlineKeyboardButton(text="🔙 Назад", callback_data="referral_menu")
+    )
     
     await callback.message.edit_text(text, reply_markup=builder.as_markup(), parse_mode="Markdown")
     await callback.answer()
 
+@dp.callback_query(F.data == "copy_link")
+async def copy_link(callback: CallbackQuery):
+    user_id = callback.from_user.id
+    bot_username = (await bot.get_me()).username
+    link = f"https://t.me/{bot_username}?start={user_id}"
+    
+    await callback.message.answer(
+        f"🔗 *Твоя реферальная ссылка:*\n\n`{link}`",
+        parse_mode="Markdown"
+    )
+    await callback.answer("✅ Ссылка отправлена!")
+
 @dp.callback_query(F.data == "referral_stats")
 async def referral_stats(callback: CallbackQuery, state: FSMContext):
     await state.clear()
-    user_id = callback.from_user.id
+    user_id = str(callback.from_user.id)
     data = load_data()
     
-    ref_data = data["referrals"].get(str(user_id), {"invited": [], "promo_given": False})
+    ref_data = data["referrals"].get(user_id, {"invited": [], "promo_given": False})
     invited = ref_data.get("invited", [])
     invited_count = len(invited)
     needed = data.get("referral_reward", 10)
@@ -431,10 +511,18 @@ async def referral_stats(callback: CallbackQuery, state: FSMContext):
     )
     
     if invited:
-        for i, inv in enumerate(invited[-5:], 1):
-            text += f"{i}. ID: `{inv}`\n"
+        text += "👤 *Приглашённые:*\n"
+        for i, inv in enumerate(invited[-10:], 1):
+            try:
+                user = await bot.get_chat(inv)
+                name = user.first_name or str(inv)
+            except:
+                name = str(inv)
+            text += f"{i}. {name} (ID: `{inv}`)\n"
+        if len(invited) > 10:
+            text += f"... и ещё {len(invited) - 10} человек"
     else:
-        text += "Пока нет приглашённых."
+        text += "👤 Пока нет приглашённых."
     
     await callback.message.edit_text(text, reply_markup=get_back_keyboard(), parse_mode="Markdown")
     await callback.answer()
@@ -442,19 +530,26 @@ async def referral_stats(callback: CallbackQuery, state: FSMContext):
 @dp.callback_query(F.data == "referral_get_promo")
 async def referral_get_promo(callback: CallbackQuery, state: FSMContext):
     await state.clear()
-    user_id = callback.from_user.id
+    user_id = str(callback.from_user.id)
     data = load_data()
     
-    ref_data = data["referrals"].get(str(user_id), {"invited": [], "promo_given": False})
+    if user_id not in data["referrals"]:
+        data["referrals"][user_id] = {"invited": [], "invited_by": None, "promo_given": False}
+        save_data(data)
+    
+    ref_data = data["referrals"].get(user_id, {"invited": [], "promo_given": False})
     invited_count = len(ref_data.get("invited", []))
     needed = data.get("referral_reward", 10)
     
     if ref_data.get("promo_given", False):
-        await callback.answer("❌ Ты уже получил промокод!", show_alert=True)
+        await callback.answer("❌ Ты уже получил бесплатный промокод!", show_alert=True)
         return
     
     if invited_count < needed:
-        await callback.answer(f"❌ Нужно ещё {needed - invited_count} приглашений!", show_alert=True)
+        await callback.answer(
+            f"❌ Нужно ещё {needed - invited_count} приглашений!",
+            show_alert=True
+        )
         return
     
     builder = InlineKeyboardBuilder()
@@ -466,7 +561,7 @@ async def referral_get_promo(callback: CallbackQuery, state: FSMContext):
     builder.row(InlineKeyboardButton(text="🔙 Назад", callback_data="referral_menu"))
     
     await callback.message.edit_text(
-        "🎁 *Выбери нож для бесплатного промокода:*",
+        "🎁 *Выбери нож для БЕСПЛАТНОГО промокода!*",
         reply_markup=builder.as_markup(),
         parse_mode="Markdown"
     )
@@ -482,37 +577,50 @@ async def referral_promo_give(callback: CallbackQuery, state: FSMContext):
         await callback.answer("❌ Ошибка!", show_alert=True)
         return
     
-    user_id = callback.from_user.id
+    user_id = str(callback.from_user.id)
     data = load_data()
     
-    ref_data = data["referrals"].get(str(user_id), {"invited": [], "promo_given": False})
+    if user_id not in data["referrals"]:
+        await callback.answer("❌ Ты не участвуешь в реферальной программе!", show_alert=True)
+        return
+    
+    ref_data = data["referrals"][user_id]
     
     if ref_data.get("promo_given", False):
-        await callback.answer("❌ Уже получено!", show_alert=True)
+        await callback.answer("❌ Ты уже получил промокод!", show_alert=True)
+        return
+    
+    invited_count = len(ref_data.get("invited", []))
+    needed = data.get("referral_reward", 10)
+    
+    if invited_count < needed:
+        await callback.answer(f"❌ Нужно ещё {needed - invited_count} приглашений!", show_alert=True)
         return
     
     ref_data["promo_given"] = True
-    data["referrals"][str(user_id)] = ref_data
+    data["referrals"][user_id] = ref_data
     save_data(data)
     
-    promo_code = f"REF-{knife_id.upper()}-{user_id % 10000}"
+    promo_code = f"REF-{knife_id.upper()}-{user_id[-4:]}"
     
     await callback.message.edit_text(
-        f"🎉 *БЕСПЛАТНЫЙ ПРОМОКОД!*\n\n"
-        f"🗡️ {knife['emoji']} {knife['name']}\n"
-        f"🔑 `{promo_code}`",
+        f"🎉 *ПОЗДРАВЛЯЮ! Ты получил БЕСПЛАТНЫЙ ПРОМОКОД!*\n\n"
+        f"🗡️ Нож: {knife['emoji']} {knife['name']}\n"
+        f"🔑 Промокод: `{promo_code}`\n\n"
+        "⚠️ Активируй в игре в течение 24 часов!",
         reply_markup=get_back_keyboard(),
         parse_mode="Markdown"
     )
     
     await bot.send_message(
         ADMIN_ID,
-        f"🎁 *БЕСПЛАТНЫЙ ПРОМОКОД ЗА РЕФЕРАЛОВ!*\n\n"
-        f"👤 [{callback.from_user.full_name}](tg://user?id={user_id})\n"
-        f"🗡️ {knife['emoji']} {knife['name']}",
+        f"🎁 *ВЫДАН БЕСПЛАТНЫЙ ПРОМОКОД ЗА РЕФЕРАЛОВ!*\n\n"
+        f"👤 [{callback.from_user.full_name}](tg://user?id={callback.from_user.id})\n"
+        f"🗡️ {knife['emoji']} {knife['name']}\n"
+        f"🔑 `{promo_code}`",
         parse_mode="Markdown"
     )
-    await callback.answer()
+    await callback.answer("🎁 Промокод выдан!")
 
 # ============================================================
 #  РАССЫЛКА
@@ -896,6 +1004,15 @@ async def main():
     print("✅ Магазин промокодов Standoff 2")
     print("👥 Реферальная система: ДА")
     print("📨 Рассылка: ДА")
+    print("🖼️ Фото: проверяем...")
+    
+    # Проверяем фото
+    photo = get_photo()
+    if photo:
+        print("✅ Фото найдено!")
+    else:
+        print("❌ Фото не найдено. Положи photo.png рядом с bot.py")
+    
     print("=" * 50)
     
     await dp.start_polling(bot)
