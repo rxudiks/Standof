@@ -277,11 +277,10 @@ async def callback_get_promo(callback: CallbackQuery, state: FSMContext):
     if not data["shop_enabled"]:
         await callback.answer("⛔ Магазин закрыт!", show_alert=True)
         return
-    await callback.message.edit_text(
-        "🗡️ *Выбери свой идеальный нож:*",
-        reply_markup=get_knife_keyboard(),
-        parse_mode="Markdown"
-    )
+    
+    text = "🗡️ *Выбери свой идеальный нож:*"
+    await callback.message.delete()
+    await callback.message.answer(text, reply_markup=get_knife_keyboard(), parse_mode="Markdown")
     await callback.answer()
 
 @dp.callback_query(F.data == "back_to_main")
@@ -322,7 +321,8 @@ async def callback_help(callback: CallbackQuery, state: FSMContext):
         "👥 *Реферальная система:*\n"
         "Приглашай друзей и получай промокоды БЕСПЛАТНО!"
     )
-    await callback.message.edit_text(text, reply_markup=get_back_keyboard(), parse_mode="Markdown")
+    await callback.message.delete()
+    await callback.message.answer(text, reply_markup=get_back_keyboard(), parse_mode="Markdown")
     await callback.answer()
 
 @dp.callback_query(F.data == "my_purchases")
@@ -339,7 +339,8 @@ async def callback_my_purchases(callback: CallbackQuery, state: FSMContext):
             status = "✅ Выдан" if purchase.get("promo_given", False) else "⏳ Ожидает"
             text += f"🗡️ {purchase['knife_name']}\n💰 {purchase['price']} ⭐\n📌 {status}\n\n"
     
-    await callback.message.edit_text(text, reply_markup=get_back_keyboard(), parse_mode="Markdown")
+    await callback.message.delete()
+    await callback.message.answer(text, reply_markup=get_back_keyboard(), parse_mode="Markdown")
     await callback.answer()
 
 # ============================================================
@@ -371,11 +372,8 @@ async def callback_knife_selected(callback: CallbackQuery, state: FSMContext):
         "После перевода нажми «✅ Я оплатил»."
     )
     
-    await callback.message.edit_text(
-        text,
-        reply_markup=get_payment_keyboard(knife_id),
-        parse_mode="Markdown"
-    )
+    await callback.message.delete()
+    await callback.message.answer(text, reply_markup=get_payment_keyboard(knife_id), parse_mode="Markdown")
     await callback.answer()
 
 @dp.callback_query(F.data.startswith("paid_"))
@@ -416,14 +414,14 @@ async def callback_paid(callback: CallbackQuery, state: FSMContext):
         parse_mode="Markdown"
     )
     
-    await callback.message.edit_text(
+    text = (
         f"✅ *Заявка отправлена!*\n\n"
         f"🗡️ {knife['emoji']} {knife['name']}\n"
         f"💰 {price} ⭐\n\n"
-        "⏳ Админ проверит оплату и выдаст промокод.",
-        reply_markup=get_back_keyboard(),
-        parse_mode="Markdown"
+        "⏳ Админ проверит оплату и выдаст промокод."
     )
+    await callback.message.delete()
+    await callback.message.answer(text, reply_markup=get_back_keyboard(), parse_mode="Markdown")
     await callback.answer("✅ Заявка отправлена!")
 
 # ============================================================
@@ -448,7 +446,9 @@ async def referral_menu(callback: CallbackQuery, state: FSMContext):
         f"📌 Осталось: *{max(0, needed - invited_count)}*\n\n"
         "🔗 Отправь ссылку друзьям и получай награды!"
     )
-    await callback.message.edit_text(text, reply_markup=get_referral_keyboard(), parse_mode="Markdown")
+    
+    await callback.message.delete()
+    await callback.message.answer(text, reply_markup=get_referral_keyboard(), parse_mode="Markdown")
     await callback.answer()
 
 @dp.callback_query(F.data == "referral_link")
@@ -477,7 +477,8 @@ async def referral_link(callback: CallbackQuery, state: FSMContext):
         InlineKeyboardButton(text="🔙 Назад", callback_data="referral_menu")
     )
     
-    await callback.message.edit_text(text, reply_markup=builder.as_markup(), parse_mode="Markdown")
+    await callback.message.delete()
+    await callback.message.answer(text, reply_markup=builder.as_markup(), parse_mode="Markdown")
     await callback.answer()
 
 @dp.callback_query(F.data == "copy_link")
@@ -524,7 +525,8 @@ async def referral_stats(callback: CallbackQuery, state: FSMContext):
     else:
         text += "👤 Пока нет приглашённых."
     
-    await callback.message.edit_text(text, reply_markup=get_back_keyboard(), parse_mode="Markdown")
+    await callback.message.delete()
+    await callback.message.answer(text, reply_markup=get_back_keyboard(), parse_mode="Markdown")
     await callback.answer()
 
 @dp.callback_query(F.data == "referral_get_promo")
@@ -560,11 +562,10 @@ async def referral_get_promo(callback: CallbackQuery, state: FSMContext):
         ))
     builder.row(InlineKeyboardButton(text="🔙 Назад", callback_data="referral_menu"))
     
-    await callback.message.edit_text(
-        "🎁 *Выбери нож для БЕСПЛАТНОГО промокода!*",
-        reply_markup=builder.as_markup(),
-        parse_mode="Markdown"
-    )
+    text = "🎁 *Выбери нож для БЕСПЛАТНОГО промокода!*"
+    
+    await callback.message.delete()
+    await callback.message.answer(text, reply_markup=builder.as_markup(), parse_mode="Markdown")
     await callback.answer()
 
 @dp.callback_query(F.data.startswith("ref_promo_"))
@@ -603,14 +604,15 @@ async def referral_promo_give(callback: CallbackQuery, state: FSMContext):
     
     promo_code = f"REF-{knife_id.upper()}-{user_id[-4:]}"
     
-    await callback.message.edit_text(
+    text = (
         f"🎉 *ПОЗДРАВЛЯЮ! Ты получил БЕСПЛАТНЫЙ ПРОМОКОД!*\n\n"
         f"🗡️ Нож: {knife['emoji']} {knife['name']}\n"
         f"🔑 Промокод: `{promo_code}`\n\n"
-        "⚠️ Активируй в игре в течение 24 часов!",
-        reply_markup=get_back_keyboard(),
-        parse_mode="Markdown"
+        "⚠️ Активируй в игре в течение 24 часов!"
     )
+    
+    await callback.message.delete()
+    await callback.message.answer(text, reply_markup=get_back_keyboard(), parse_mode="Markdown")
     
     await bot.send_message(
         ADMIN_ID,
@@ -637,14 +639,14 @@ async def admin_mailing(callback: CallbackQuery, state: FSMContext):
     data = load_data()
     users_count = len(data.get("users", []))
     
-    await callback.message.edit_text(
+    text = (
         "📨 *Рассылка*\n\n"
         f"👤 Всего пользователей: *{users_count}*\n\n"
         "✍️ Отправь сообщение для рассылки.\n"
-        "📌 Для отмены напиши /cancel",
-        reply_markup=get_back_keyboard(),
-        parse_mode="Markdown"
+        "📌 Для отмены напиши /cancel"
     )
+    await callback.message.delete()
+    await callback.message.answer(text, reply_markup=get_back_keyboard(), parse_mode="Markdown")
     await state.set_state(AdminStates.waiting_for_mailing)
     await callback.answer()
 
@@ -703,11 +705,9 @@ async def admin_nick(callback: CallbackQuery, state: FSMContext):
         await callback.answer("⛔ Доступ запрещён!", show_alert=True)
         return
     await state.clear()
-    await callback.message.edit_text(
-        "✏️ *Изменить ник*\n\nВведи новый ник:\n📌 /cancel для отмены",
-        reply_markup=get_back_keyboard(),
-        parse_mode="Markdown"
-    )
+    text = "✏️ *Изменить ник*\n\nВведи новый ник:\n📌 /cancel для отмены"
+    await callback.message.delete()
+    await callback.message.answer(text, reply_markup=get_back_keyboard(), parse_mode="Markdown")
     await state.set_state(AdminStates.waiting_for_nick)
     await callback.answer()
 
@@ -733,11 +733,9 @@ async def admin_link(callback: CallbackQuery, state: FSMContext):
         await callback.answer("⛔ Доступ запрещён!", show_alert=True)
         return
     await state.clear()
-    await callback.message.edit_text(
-        "🔗 *Изменить ссылку*\n\nВведи новую ссылку (https://t.me/...):\n📌 /cancel для отмены",
-        reply_markup=get_back_keyboard(),
-        parse_mode="Markdown"
-    )
+    text = "🔗 *Изменить ссылку*\n\nВведи новую ссылку (https://t.me/...):\n📌 /cancel для отмены"
+    await callback.message.delete()
+    await callback.message.answer(text, reply_markup=get_back_keyboard(), parse_mode="Markdown")
     await state.set_state(AdminStates.waiting_for_link)
     await callback.answer()
 
@@ -763,6 +761,7 @@ async def admin_price(callback: CallbackQuery, state: FSMContext):
         await callback.answer("⛔ Доступ запрещён!", show_alert=True)
         return
     await state.clear()
+    
     builder = InlineKeyboardBuilder()
     for knife in DEFAULT_KNIVES:
         price = load_data()["prices"].get(knife["id"], knife["price"])
@@ -771,11 +770,10 @@ async def admin_price(callback: CallbackQuery, state: FSMContext):
             callback_data=f"admin_price_set_{knife['id']}"
         ))
     builder.row(InlineKeyboardButton(text="🔙 Назад", callback_data="back_to_main"))
-    await callback.message.edit_text(
-        "💰 *Выбери нож для изменения цены:*",
-        reply_markup=builder.as_markup(),
-        parse_mode="Markdown"
-    )
+    
+    text = "💰 *Выбери нож для изменения цены:*"
+    await callback.message.delete()
+    await callback.message.answer(text, reply_markup=builder.as_markup(), parse_mode="Markdown")
     await callback.answer()
 
 @dp.callback_query(F.data.startswith("admin_price_set_"))
@@ -789,13 +787,14 @@ async def admin_price_set(callback: CallbackQuery, state: FSMContext):
         await callback.answer("❌ Ошибка!", show_alert=True)
         return
     await state.update_data(knife_id=knife_id)
-    await callback.message.edit_text(
+    
+    text = (
         f"✏️ *Изменить цену для {knife['emoji']} {knife['name']}*\n\n"
         f"Текущая цена: {load_data()['prices'].get(knife_id, knife['price'])} ⭐\n\n"
-        "Введи новую цену:\n📌 /cancel для отмены",
-        reply_markup=get_back_keyboard(),
-        parse_mode="Markdown"
+        "Введи новую цену:\n📌 /cancel для отмены"
     )
+    await callback.message.delete()
+    await callback.message.answer(text, reply_markup=get_back_keyboard(), parse_mode="Markdown")
     await state.set_state(AdminStates.waiting_for_price)
     await callback.answer()
 
@@ -838,13 +837,14 @@ async def admin_referral(callback: CallbackQuery, state: FSMContext):
     await state.clear()
     data = load_data()
     reward = data.get("referral_reward", 10)
-    await callback.message.edit_text(
+    
+    text = (
         f"👥 *Настройка рефералки*\n\n"
         f"🎯 Сейчас нужно: *{reward}* приглашений\n\n"
-        "Введи новое количество:\n📌 /cancel для отмены",
-        reply_markup=get_back_keyboard(),
-        parse_mode="Markdown"
+        "Введи новое количество:\n📌 /cancel для отмены"
     )
+    await callback.message.delete()
+    await callback.message.answer(text, reply_markup=get_back_keyboard(), parse_mode="Markdown")
     await state.set_state(AdminStates.waiting_for_referral_reward)
     await callback.answer()
 
@@ -881,11 +881,10 @@ async def admin_toggle_shop(callback: CallbackQuery, state: FSMContext):
     data["shop_enabled"] = not data["shop_enabled"]
     save_data(data)
     status = "✅ открыт" if data["shop_enabled"] else "❌ закрыт"
-    await callback.message.edit_text(
-        f"🔒 Магазин теперь {status}!",
-        reply_markup=get_admin_keyboard(),
-        parse_mode="Markdown"
-    )
+    
+    text = f"🔒 Магазин теперь {status}!"
+    await callback.message.delete()
+    await callback.message.answer(text, reply_markup=get_admin_keyboard(), parse_mode="Markdown")
     await callback.answer()
 
 @dp.callback_query(F.data == "admin_stats")
@@ -900,6 +899,7 @@ async def admin_stats(callback: CallbackQuery, state: FSMContext):
     pending = len([p for p in data["purchases"] if not p.get("promo_given", False)])
     referrals = len(data.get("referrals", {}))
     users = len(data.get("users", []))
+    
     text = (
         "📊 *Статистика*\n\n"
         f"📦 Ножей: {len(DEFAULT_KNIVES)}\n"
@@ -910,7 +910,8 @@ async def admin_stats(callback: CallbackQuery, state: FSMContext):
         f"👤 Пользователей: {users}\n"
         f"🔒 Магазин: {'✅' if data['shop_enabled'] else '❌'}"
     )
-    await callback.message.edit_text(text, reply_markup=get_admin_keyboard(), parse_mode="Markdown")
+    await callback.message.delete()
+    await callback.message.answer(text, reply_markup=get_admin_keyboard(), parse_mode="Markdown")
     await callback.answer()
 
 @dp.callback_query(F.data == "admin_prices")
@@ -924,7 +925,9 @@ async def admin_prices(callback: CallbackQuery, state: FSMContext):
     for knife in DEFAULT_KNIVES:
         price = data["prices"].get(knife["id"], knife["price"])
         text += f"{knife['emoji']} {knife['name']}: `{price} ⭐`\n"
-    await callback.message.edit_text(text, reply_markup=get_admin_keyboard(), parse_mode="Markdown")
+    
+    await callback.message.delete()
+    await callback.message.answer(text, reply_markup=get_admin_keyboard(), parse_mode="Markdown")
     await callback.answer()
 
 @dp.callback_query(F.data == "admin_give_promo")
@@ -939,6 +942,7 @@ async def admin_give_promo(callback: CallbackQuery, state: FSMContext):
         await callback.message.edit_text("✅ Все промокоды выданы!", reply_markup=get_admin_keyboard(), parse_mode="Markdown")
         await callback.answer()
         return
+    
     builder = InlineKeyboardBuilder()
     for i, purchase in enumerate(pending[-10:], 1):
         builder.row(InlineKeyboardButton(
@@ -946,7 +950,10 @@ async def admin_give_promo(callback: CallbackQuery, state: FSMContext):
             callback_data=f"give_promo_{purchase['user_id']}_{purchase['knife_id']}"
         ))
     builder.row(InlineKeyboardButton(text="🔙 Назад", callback_data="back_to_main"))
-    await callback.message.edit_text("🎁 *Выдача промокодов*", reply_markup=builder.as_markup(), parse_mode="Markdown")
+    
+    text = "🎁 *Выдача промокодов*"
+    await callback.message.delete()
+    await callback.message.answer(text, reply_markup=builder.as_markup(), parse_mode="Markdown")
     await callback.answer()
 
 @dp.callback_query(F.data.startswith("give_promo_"))
@@ -1006,12 +1013,11 @@ async def main():
     print("📨 Рассылка: ДА")
     print("🖼️ Фото: проверяем...")
     
-    # Проверяем фото
     photo = get_photo()
     if photo:
         print("✅ Фото найдено!")
     else:
-        print("❌ Фото не найдено. Положи photo.png рядом с bot.py")
+        print("❌ Фото не найдено. Положи photo.jpg рядом с bot.py")
     
     print("=" * 50)
     
